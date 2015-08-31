@@ -38,7 +38,7 @@ First table is describing man-on-duty row-by-row and should look like this:
 
 First table should be followed by one or more sections, which begins with
 header in format:
-    
+
     <Month>, <Year>
 
 Header must be followed by table, which represents calendar for specified
@@ -155,7 +155,15 @@ func main() {
 
 	switch {
 	case args["-j"].(bool):
-		jsonMasters, err := json.Marshal(masters)
+		var jsonMasters []byte
+		var err error
+
+		if args["-c"].(bool) {
+			jsonMasters, err = json.Marshal(masters[0])
+		} else {
+			jsonMasters, err = json.Marshal(masters)
+		}
+
 		if err != nil {
 			panic(err)
 		}
