@@ -27,36 +27,36 @@ tables.
 
 First table is describing man-on-duty row-by-row and should look like this:
 
-	+--------+--------------------------------------------+
-	| <name> | email@example.com / @link.to.slack.contact |
-	+--------+--------------------------------------------+
+    +--------+--------------------------------------------+
+    | <name> | email@example.com / @link.to.slack.contact |
+    +--------+--------------------------------------------+
 
-	E-mail and Slack Contact is optional.
+    E-mail and Slack Contact is optional.
 
-	Each row should be colored in unique way. This color will be used in
-	following tables.
+    Each row should be colored in unique way. This color will be used in
+    following tables.
 
 First table should be followed by one or more sections, which begins with
 header in format:
-	
-	<Month>, <Year>
+    
+    <Month>, <Year>
 
 Header must be followed by table, which represents calendar for specified
 month:
 
-	+---+---+---+---+---+---+---+
-	|Mon|Tue|Wed|Thu|Fri|Sat|Sun|
-	+---+---+---+---+---+---+---+
-	|   |  1|  2|  3|  4|  5|  6|
-	+---+---+---+---+---+---+---+
-	|                       ... |
-	+---+---+---+---+---+---+---+
-	| 27| 28| 29| 30| 31|   |   |
-	+---+---+---+---+---+---+---+
+    +---+---+---+---+---+---+---+
+    |Mon|Tue|Wed|Thu|Fri|Sat|Sun|
+    +---+---+---+---+---+---+---+
+    |   |  1|  2|  3|  4|  5|  6|
+    +---+---+---+---+---+---+---+
+    |                       ... |
+    +---+---+---+---+---+---+---+
+    | 27| 28| 29| 30| 31|   |   |
+    +---+---+---+---+---+---+---+
 
-	Header is not mandatory.
+    Header is not mandatory.
 
-	Each cell shuld be colored in the same way as rows in the first table.
+    Each cell shuld be colored in the same way as rows in the first table.
 
 Usage:
     $0 -h | --help
