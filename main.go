@@ -216,9 +216,8 @@ func parseMatersSchedule(confluencePage string) ([]Master, error) {
 	)
 
 	var (
-		reTagDelimiter   = regexp.MustCompile(`(>)|(<)`)
-		reContactsHeader = regexp.MustCompile(`Контактная информация`)
-		reContactName    = regexp.MustCompile(
+		reTagDelimiter = regexp.MustCompile(`(>)|(<)`)
+		reContactName  = regexp.MustCompile(
 			`<td.*?(rgb\([^)]+\)|highlight-\w+)`,
 		)
 
