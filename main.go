@@ -83,12 +83,14 @@ type Duty struct {
 }
 
 type Master struct {
-	Current bool
-	Name    string
-	Email   string
-	Slack   string
-	Colour  string
-	Duty    []Duty
+	Current    bool
+	Today      Duty
+	Name       string
+	Email      string
+	Slack      string
+	SlackShort string
+	Colour     string
+	Duty       []Duty
 }
 
 func main() {
@@ -231,7 +233,7 @@ func parseMatersSchedule(confluencePage string) ([]Master, error) {
 
 		reContactEmail = regexp.MustCompile(`[\w.]+@\S+`)
 		reContactSlack = regexp.MustCompile(
-			`https://.*slack.com/messages/[^"]+`,
+			`https://.*slack.com/messages/([^"]+)`,
 		)
 		reContactMonth = regexp.MustCompile(`(\S+), (\d+)`)
 	)
@@ -305,6 +307,7 @@ func parseMatersSchedule(confluencePage string) ([]Master, error) {
 			matches = reContactSlack.FindStringSubmatch(line)
 			if len(matches) > 0 {
 				master.Slack = matches[0]
+				master.SlackShort = matches[1]
 			}
 
 		case parserStateSchedule:
@@ -327,6 +330,10 @@ func parseMatersSchedule(confluencePage string) ([]Master, error) {
 			if time.Now().Day() == day {
 				if months[strings.ToLower(month)] == time.Now().Month() {
 					master.Current = true
+					master.Today = Duty{
+						Month: month,
+						Day:   day,
+					}
 				}
 			}
 
@@ -354,7 +361,7 @@ func printDutyTable(masters []Master, writer io.Writer) {
 			[]byte(fmt.Sprintf(
 				"%-2s%s\t%s\t%s\n",
 				currentFlag,
-				master.Name, master.Email, master.Slack,
+				master.Name, master.Email, master.SlackShort,
 			)),
 		)
 
