@@ -80,6 +80,7 @@ Options:
 type Duty struct {
 	Month string
 	Day   int
+	Date  string
 }
 
 type Master struct {
@@ -119,7 +120,7 @@ func main() {
 		http.HandleFunc(
 			"/",
 			func(writer http.ResponseWriter, request *http.Request) {
-				masters, err = parseMatersSchedule(confluencePage)
+				masters, err = parseMastersSchedule(confluencePage)
 				if err != nil {
 					log.Print(err)
 				}
@@ -137,7 +138,7 @@ func main() {
 		http.ListenAndServe(args["--listen"].(string), nil)
 
 	default:
-		masters, err = parseMatersSchedule(confluencePage)
+		masters, err = parseMastersSchedule(confluencePage)
 		if err != nil {
 			panic(err)
 		}
@@ -215,7 +216,7 @@ func getConfluencePage(url, login, password string) (string, error) {
 	return article.Body.Storage.Value, nil
 }
 
-func parseMatersSchedule(confluencePage string) ([]Master, error) {
+func parseMastersSchedule(confluencePage string) ([]Master, error) {
 	const (
 		parserStateBegin = iota
 		parserStateContacts
@@ -327,12 +328,19 @@ func parseMatersSchedule(confluencePage string) ([]Master, error) {
 		case parserStateDay:
 			day, _ := strconv.Atoi(line)
 
+			date := time.Date(
+				time.Now().Year(), months[strings.ToLower(month)], day,
+				0, 0, 0, 0,
+				time.Local,
+			).Format("2006-01-02")
+
 			if time.Now().Day() == day {
 				if months[strings.ToLower(month)] == time.Now().Month() {
 					master.Current = true
 					master.Today = Duty{
 						Month: month,
 						Day:   day,
+						Date:  date,
 					}
 				}
 			}
@@ -340,11 +348,11 @@ func parseMatersSchedule(confluencePage string) ([]Master, error) {
 			master.Duty = append(master.Duty, Duty{
 				Month: month,
 				Day:   day,
+				Date:  date,
 			})
 
 			state = parserStateSchedule
 		}
-
 	}
 
 	return masters, nil
