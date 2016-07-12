@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/docopt/docopt-go"
+	"github.com/kovetskiy/ko"
 )
 
 const usage = `cake - confluence schedule table reader.
@@ -59,9 +60,9 @@ month:
     Each cell shuld be colored in the same way as rows in the first table.
 
 Usage:
-    $0 -h | --help
-    $0 [options] --url= --login= --password= -D [--listen=]
-    $0 [options] --url= --login= --password= -L [-jc]
+    cake -h | --help
+    cake [options] (--login= --password=|[--config=]) (--id=|--url=) -D [--listen=]
+    cake [options] (--login= --password=|[--config=]) (--id=|--url=) -L [-jc]
 
 Options:
     -h --help              Show this help.
@@ -70,50 +71,95 @@ Options:
       -c                   Prints only current man on duty.
     -D                     Run in daemon mode and serve schedules by HTTP.
       --listen=<address>   Listen address and port for daemon mode.
-                           [default: :8080]
+                            [default: :8080]
     --url=<url>            Confluence URL to get data from. See more about
-                           format above.
+                            format above.
     --login=<login>        Confluence user login.
     --password=<password>  Confluence user password.
+    --id=<id>              Specifies article ID to access schedule.
+    --config=<config>      Path to config file in TOML format:
+                            * login - required;
+                            * password - required;
+                            * url.host - confluence host;
+                            * url.template - URL with two placeholders, "%s",
+                              which will be replaced with host and article
+                              ID respectfully.
+                            [default: $HOME/.config/cake.conf]
 `
 
-type Duty struct {
+type config struct {
+	Login    string `required:"true"`
+	Password string `required:"true"`
+	URL      struct {
+		Host     string `required:"true"`
+		Template string `default:"http://%s/rest/api/content/%s"`
+	}
+}
+
+type duty struct {
 	Month string
 	Day   int
 	Date  string
 }
 
-type Master struct {
+type master struct {
 	Current    bool
-	Today      Duty
+	Today      duty
 	Name       string
 	Email      string
 	Slack      string
 	SlackShort string
 	Colour     string
-	Duty       []Duty
+	duty       []duty
 }
 
 func main() {
 	args, err := docopt.Parse(
-		strings.Replace(usage, "$0", os.Args[0], -1),
-		nil, true, "cake 1.0", false,
+		strings.Replace(usage, "$HOME", os.ExpandEnv(`$HOME`), -1),
+		nil, true, "cake 1.1", false,
 	)
 	if err != nil {
 		panic(err)
+	}
+
+	var (
+		url, _ = args["--url"].(string)
+		id, _  = args["--id"].(string)
+
+		login, _    = args["--login"].(string)
+		password, _ = args["--password"].(string)
+
+		configPath = args["--config"].(string)
+	)
+
+	config := config{
+		Login:    login,
+		Password: password,
+	}
+
+	if config.Login == "" {
+		err = ko.Load(configPath, &config)
+		if err != nil {
+			log.Fatalf(`can't load config: %s`, err)
+		}
+	}
+
+	articleURL := url
+	if articleURL == "" {
+		articleURL = fmt.Sprintf(config.URL.Template, config.URL.Host, id)
 	}
 
 	confluencePage, err := getConfluencePage(
-		args["--url"].(string),
-		args["--login"].(string),
-		args["--password"].(string),
+		articleURL,
+		config.Login,
+		config.Password,
 	)
 
 	if err != nil {
 		panic(err)
 	}
 
-	var masters []Master
+	var masters []master
 
 	switch {
 	case args["-D"].(bool):
@@ -125,17 +171,24 @@ func main() {
 					log.Print(err)
 				}
 
-				jsonMasters, err := json.Marshal(masters)
+				var mastersJSON []byte
+				mastersJSON, err = json.Marshal(masters)
 				if err != nil {
 					log.Print(err)
 				}
 
-				writer.Write(jsonMasters)
+				_, err = writer.Write(mastersJSON)
+				if err != nil {
+					log.Fatalf(`can't write JSON: %s`, err)
+				}
 			},
 		)
 
 		log.Printf("starting server at %s", args["--listen"].(string))
-		http.ListenAndServe(args["--listen"].(string), nil)
+		err = http.ListenAndServe(args["--listen"].(string), nil)
+		if err != nil {
+			log.Fatalf(`can's start daemon: %s`, err)
+		}
 
 	default:
 		masters, err = parseMastersSchedule(confluencePage)
@@ -145,7 +198,7 @@ func main() {
 	}
 
 	if args["-c"].(bool) {
-		currentMaster := Master{}
+		currentMaster := master{}
 		for _, master := range masters {
 			if master.Current {
 				currentMaster = master
@@ -153,37 +206,43 @@ func main() {
 			}
 		}
 
-		masters = []Master{currentMaster}
+		masters = []master{currentMaster}
 	}
 
 	switch {
 	case args["-j"].(bool):
-		var jsonMasters []byte
+		var mastersJSON []byte
 		var err error
 
 		if args["-c"].(bool) {
-			jsonMasters, err = json.Marshal(masters[0])
+			mastersJSON, err = json.Marshal(masters[0])
 		} else {
-			jsonMasters, err = json.Marshal(masters)
+			mastersJSON, err = json.Marshal(masters)
 		}
 
 		if err != nil {
 			panic(err)
 		}
 
-		os.Stdout.Write(jsonMasters)
+		_, err = os.Stdout.Write(mastersJSON)
+		if err != nil {
+			log.Fatalf(`can't write result to stdout: %s`, err)
+		}
 
 	default:
 		tabWriter := tabwriter.NewWriter(os.Stdout, 1, 4, 2, ' ', 0)
 
 		printDutyTable(masters, tabWriter)
 
-		tabWriter.Flush()
+		err := tabWriter.Flush()
+		if err != nil {
+			log.Fatalf(`can't flush output: %s`, err)
+		}
 	}
 }
 
 func getConfluencePage(url, login, password string) (string, error) {
-	confluenceRequest, err := http.NewRequest("GET", url, nil)
+	confluenceRequest, err := http.NewRequest("GET", url+`?expand=body.storage`, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -216,7 +275,7 @@ func getConfluencePage(url, login, password string) (string, error) {
 	return article.Body.Storage.Value, nil
 }
 
-func parseMastersSchedule(confluencePage string) ([]Master, error) {
+func parseMastersSchedule(confluencePage string) ([]master, error) {
 	const (
 		parserStateBegin = iota
 		parserStateContacts
@@ -260,8 +319,8 @@ func parseMastersSchedule(confluencePage string) ([]Master, error) {
 
 	state := parserStateContacts
 
-	masters := []Master{}
-	master := &Master{}
+	masters := []master{}
+	master := &master{}
 	month := ""
 
 	for _, line := range strings.Split(splittedBody, "\n") {
@@ -337,7 +396,7 @@ func parseMastersSchedule(confluencePage string) ([]Master, error) {
 			if time.Now().Day() == day {
 				if months[strings.ToLower(month)] == time.Now().Month() {
 					master.Current = true
-					master.Today = Duty{
+					master.Today = duty{
 						Month: month,
 						Day:   day,
 						Date:  date,
@@ -345,7 +404,7 @@ func parseMastersSchedule(confluencePage string) ([]Master, error) {
 				}
 			}
 
-			master.Duty = append(master.Duty, Duty{
+			master.duty = append(master.duty, duty{
 				Month: month,
 				Day:   day,
 				Date:  date,
@@ -358,25 +417,31 @@ func parseMastersSchedule(confluencePage string) ([]Master, error) {
 	return masters, nil
 }
 
-func printDutyTable(masters []Master, writer io.Writer) {
+func printDutyTable(masters []master, writer io.Writer) {
 	for _, master := range masters {
 		currentFlag := ""
 		if master.Current {
 			currentFlag = "*"
 		}
 
-		writer.Write(
+		_, err := writer.Write(
 			[]byte(fmt.Sprintf(
 				"%-2s%s\t%s\t%s\n",
 				currentFlag,
 				master.Name, master.Email, master.SlackShort,
 			)),
 		)
+		if err != nil {
+			log.Fatalf(`can't write row in duty table output: %s`, err)
+		}
 
-		for _, dutyDate := range master.Duty {
-			writer.Write([]byte(
+		for _, dutyDate := range master.duty {
+			_, err := writer.Write([]byte(
 				fmt.Sprintf("    %-2d %s\t\t\n", dutyDate.Day, dutyDate.Month),
 			))
+			if err != nil {
+				log.Fatalf(`can't write duty dates in table output: %s`, err)
+			}
 		}
 	}
 }
