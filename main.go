@@ -110,7 +110,7 @@ type master struct {
 	Slack      string
 	SlackShort string
 	Colour     string
-	duty       []duty
+	Duty       []duty
 }
 
 func main() {
@@ -404,7 +404,7 @@ func parseMastersSchedule(confluencePage string) ([]master, error) {
 				}
 			}
 
-			master.duty = append(master.duty, duty{
+			master.Duty = append(master.Duty, duty{
 				Month: month,
 				Day:   day,
 				Date:  date,
@@ -435,7 +435,7 @@ func printDutyTable(masters []master, writer io.Writer) {
 			log.Fatalf(`can't write row in duty table output: %s`, err)
 		}
 
-		for _, dutyDate := range master.duty {
+		for _, dutyDate := range master.Duty {
 			_, err := writer.Write([]byte(
 				fmt.Sprintf("    %-2d %s\t\t\n", dutyDate.Day, dutyDate.Month),
 			))
